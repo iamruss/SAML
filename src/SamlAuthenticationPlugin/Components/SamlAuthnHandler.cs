@@ -153,7 +153,7 @@ namespace Telligent.Services.SamlAuthenticationPlugin.Components
             var authNXml = string.Format(
                     SamlRequestTemplate,
                     requestId,
-                    DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"), //DateTime.UtcNow.ToString("yyyy-MM-ddTHH:MM:ss.fffZ"),
+                    DateTime.UtcNow.ToString("yyyy-MM-ddThh:mm:ss.fffZ"),
                     _identityProviderUrl,
                     _issuerUrl);
 
@@ -181,8 +181,7 @@ namespace Telligent.Services.SamlAuthenticationPlugin.Components
 
         private string GetSamlAuthnBase64(string requestId, string _identityProviderUrl, string _issuerUrl, string thumbprint = null)
         {
-            return System.Convert.ToBase64String(
-                System.Text.Encoding.UTF8.GetBytes(GetSamlAuthnXml(requestId, _identityProviderUrl, _issuerUrl, thumbprint)));
+            return System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(GetSamlAuthnXml(requestId, _identityProviderUrl, _issuerUrl, thumbprint)));
         }
 
         private string ToBase64(string xml)
@@ -191,15 +190,29 @@ namespace Telligent.Services.SamlAuthenticationPlugin.Components
                 System.Text.Encoding.UTF8.GetBytes(xml));
         }
 
+        public static byte[] ZipStr2(String str)
+        {
+            using (MemoryStream output = new MemoryStream())
+            {
+                using (DeflateStream gzip = new DeflateStream(output, CompressionMode.Compress))
+                {
+                    using (StreamWriter writer = new StreamWriter(gzip, System.Text.Encoding.UTF8))
+                    {
+                        writer.Write(str);
+                    }
+                }
+
+                return output.ToArray();
+            }
+        }
+
         public static byte[] ZipStr(String str)
         {
             using (MemoryStream output = new MemoryStream())
             {
-                using (DeflateStream gzip =
-                  new DeflateStream(output, CompressionMode.Compress))
+                using (GZipStream gzip = new GZipStream(output, CompressionMode.Compress))
                 {
-                    using (StreamWriter writer =
-                      new StreamWriter(gzip, System.Text.Encoding.UTF8))
+                    using (StreamWriter writer = new StreamWriter(gzip, System.Text.Encoding.UTF8))
                     {
                         writer.Write(str);
                     }

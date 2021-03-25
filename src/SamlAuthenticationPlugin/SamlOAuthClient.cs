@@ -75,7 +75,7 @@ namespace Telligent.Services.SamlAuthenticationPlugin
             //hook to create custom user authenticated event
             _usersApi.Events.AfterIdentify += new UserAfterIdentifyEventHandler(Events_AfterIdentify);
 
-            //cleanup persistant storage when a user is deleted
+            //cleanup persistent storage when a user is deleted
             _usersApi.Events.AfterDelete += new UserAfterDeleteEventHandler(Events_AfterUserDelete);
 
         }
@@ -317,7 +317,9 @@ namespace Telligent.Services.SamlAuthenticationPlugin
         {
             try
             {
+                if (e.Id == null) return;
                 SqlData.DeleteSamlTokenData(e.Id.Value);
+                SqlData.DeleteOAuthLink(e.Id.Value);
             }
             catch (Exception ex)
             {

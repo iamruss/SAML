@@ -18,9 +18,9 @@ namespace Telligent.Services.SamlAuthenticationPlugin
 
 
         #region Helper methods & properties
+
         protected static SqlConnection GetSqlConnection()
         {
-
             try
             {
                 return Apis.Get<IDatabaseConnections>().GetConnection("SiteSqlServer");
@@ -29,14 +29,12 @@ namespace Telligent.Services.SamlAuthenticationPlugin
             {
                 throw new ArgumentException("SQL Connection String 'SiteSqlServer' is unavailable or invalid.");
             }
-
         }
 
         #endregion
 
         private SqlData()
         {
-            
         }
 
         public static void SaveEncryptedSamlToken(Guid tokenKey, string encryptedData)
@@ -52,7 +50,7 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                               "(@TokenKey" +
                               ",@EncryptedData)";
 
-                    var myCommand = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+                    var myCommand = new SqlCommand(sql, conn) {CommandType = CommandType.Text};
 
                     myCommand.Parameters.Add("@TokenKey", SqlDbType.UniqueIdentifier).Value = tokenKey;
                     myCommand.Parameters.Add("@EncryptedData", SqlDbType.NVarChar).Value = encryptedData;
@@ -63,7 +61,8 @@ namespace Telligent.Services.SamlAuthenticationPlugin
             }
             catch (Exception ex)
             {
-                Apis.Get<IEventLog>().Write("Error inserting token into the db_SamlTempTokenData table. " + ex, new EventLogEntryWriteOptions() { Category = "SAML", EventId = 6023, EventType = "Error" });
+                Apis.Get<IEventLog>().Write("Error inserting token into the db_SamlTempTokenData table. " + ex,
+                    new EventLogEntryWriteOptions() {Category = "SAML", EventId = 6023, EventType = "Error"});
             }
         }
 
@@ -76,19 +75,89 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                     var sql =
                         $"SELECT EncryptedData FROM [{databaseOwner}].[db_SamlTempTokenData] WHERE TokenKey = @TokenKey";
 
-                    var command = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+                    var command = new SqlCommand(sql, conn) {CommandType = CommandType.Text};
 
                     command.Parameters.Add("@TokenKey", SqlDbType.UniqueIdentifier).Value = Guid.Parse(tokenKey);
                     conn.Open();
 
-                    return (string)command.ExecuteScalar();
+                    return (string) command.ExecuteScalar();
                 }
             }
             catch (Exception ex)
             {
-                Apis.Get<IEventLog>().Write("Error reading from db_SamlTempTokenData; I dont think its installed. " + ex, new EventLogEntryWriteOptions() { Category = "SAML", EventId = 6022, EventType = "Error" });
+                Apis.Get<IEventLog>()
+                    .Write("Error reading from db_SamlTempTokenData; I dont think its installed. " + ex,
+                        new EventLogEntryWriteOptions() {Category = "SAML", EventId = 6022, EventType = "Error"});
                 return string.Empty;
             }
+        }
+
+        public static void DeleteOAuthLink(int userId)
+        {
+            var clientUserId = GetOAuthClientUserId(userId);
+            try
+            {
+                using (var conn = GetSqlConnection())
+                {
+                    using (var command =
+                        new SqlCommand($"[{databaseOwner}].[te_OAuth_RemoveLink]", conn)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        })
+                    {
+                        command.Parameters.Add("@ClientType", SqlDbType.NVarChar).Value = "saml";
+                        command.Parameters.Add("@ClientUserId", SqlDbType.NVarChar).Value = clientUserId;
+                        command.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                        conn.Open();
+                        command.ExecuteScalar();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Apis.Get<IEventLog>()
+                    .Write($"Could not delete OAuth Link for user {userId}. {ex}",
+                        new EventLogEntryWriteOptions() {Category = "SAML", EventId = 6022, EventType = "Error"});
+            }
+        }
+
+        private static string GetOAuthClientUserId(int userId)
+        {
+            string clientUserId = null;
+            try
+            {
+                using (var conn = GetSqlConnection())
+                {
+                    using (var command =
+                        new SqlCommand($"[{databaseOwner}].[te_OAuth_GetLinkByClientTypeAndUser]", conn)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        })
+                    {
+                        command.Parameters.Add("@ClientType", SqlDbType.NVarChar).Value = "saml";
+                        command.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                        conn.Open();
+                        using (var reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                clientUserId = reader.GetString(reader.GetOrdinal("ClientUserId"));
+                                reader.Close();
+                                return clientUserId;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Apis.Get<IEventLog>()
+                    .Write($"Could not get OAuth Link for user {userId}. {ex}",
+                        new EventLogEntryWriteOptions() {Category = "SAML", EventId = 6022, EventType = "Error"});
+                clientUserId = null;
+            }
+
+            return clientUserId;
         }
 
         public static void DeleteTokenData(string tokenKey)
@@ -100,7 +169,7 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                     var sql =
                         $"DELETE FROM [{databaseOwner}].[db_SamlTempTokenData] WHERE TokenKey = @TokenKey";
 
-                    var command = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+                    var command = new SqlCommand(sql, conn) {CommandType = CommandType.Text};
 
                     command.Parameters.Add("@TokenKey", SqlDbType.UniqueIdentifier).Value = Guid.Parse(tokenKey);
                     conn.Open();
@@ -109,13 +178,15 @@ namespace Telligent.Services.SamlAuthenticationPlugin
             }
             catch (Exception ex)
             {
-                Apis.Get<IEventLog>().Write("Error deleting from db_SamlTokenData; I dont think its installed. " + ex, new EventLogEntryWriteOptions() { Category = "SAML", EventId = 6024, EventType = "Error" });
+                Apis.Get<IEventLog>().Write("Error deleting from db_SamlTokenData; I dont think its installed. " + ex,
+                    new EventLogEntryWriteOptions() {Category = "SAML", EventId = 6024, EventType = "Error"});
             }
         }
 
         public static void SaveSamlToken(SamlTokenData samlTokenData)
         {
-            if (!samlTokenData.IsExistingUser()) throw new InvalidOperationException("The User Id must be greater than zero.");
+            if (!samlTokenData.IsExistingUser())
+                throw new InvalidOperationException("The User Id must be greater than zero.");
 
             if (GetSamlTokenStoreData(samlTokenData.UserId) == null)
                 InsertSamlToken(samlTokenData);
@@ -151,7 +222,8 @@ namespace Telligent.Services.SamlAuthenticationPlugin
             }
             catch (Exception ex)
             {
-                Apis.Get<IEventLog>().Write("Error reading from db_SamlTokenStore; I dont think its installed. " + ex, new EventLogEntryWriteOptions { Category= "SAML",  EventId =  6011, EventType="Error"});
+                Apis.Get<IEventLog>().Write("Error reading from db_SamlTokenStore; I dont think its installed. " + ex,
+                    new EventLogEntryWriteOptions {Category = "SAML", EventId = 6011, EventType = "Error"});
             }
 
             return null;
@@ -161,13 +233,13 @@ namespace Telligent.Services.SamlAuthenticationPlugin
 
         private static void InsertSamlToken(SamlTokenData oAuthData)
         {
-
             var oAuthDataXml = SamlHelpers.ConvertToString(oAuthData);
 
             InsertSamlToken(oAuthData.UserId, oAuthDataXml, oAuthData.ResponseDate, oAuthData.Email, oAuthData.NameId);
         }
 
-        private static void InsertSamlToken(int userId, string oAuthData, DateTime responseDate, string email, string nameId)
+        private static void InsertSamlToken(int userId, string oAuthData, DateTime responseDate, string email,
+            string nameId)
         {
             try
             {
@@ -198,12 +270,12 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                     // Execute the command
                     myConnection.Open();
                     myCommand.ExecuteNonQuery();
-
                 }
             }
             catch (Exception ex)
             {
-                Apis.Get<IEventLog>().Write("Error inserting token into the db_SamlTokenStore. " + ex, new EventLogEntryWriteOptions { Category = "SAML", EventId = 6009, EventType = "Error" });
+                Apis.Get<IEventLog>().Write("Error inserting token into the db_SamlTokenStore. " + ex,
+                    new EventLogEntryWriteOptions {Category = "SAML", EventId = 6009, EventType = "Error"});
             }
         }
 
@@ -213,13 +285,13 @@ namespace Telligent.Services.SamlAuthenticationPlugin
 
         private static void UpdateSamlToken(SamlTokenData oAuthData)
         {
-
             var oAuthDataXml = SamlHelpers.ConvertToString(oAuthData);
 
             UpdateSamlToken(oAuthData.UserId, oAuthDataXml, oAuthData.ResponseDate, oAuthData.Email, oAuthData.NameId);
         }
 
-        private static void UpdateSamlToken(int userId, string oAuthData, DateTime responseDate, string email, string nameId)
+        private static void UpdateSamlToken(int userId, string oAuthData, DateTime responseDate, string email,
+            string nameId)
         {
             try
             {
@@ -244,12 +316,12 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                     // Execute the command
                     myConnection.Open();
                     myCommand.ExecuteNonQuery();
-
                 }
             }
             catch (Exception ex)
             {
-                Apis.Get<IEventLog>().Write("Error updating from db_SamlTokenStore. " + ex, new EventLogEntryWriteOptions { Category = "SAML", EventId = 6010, EventType = "Error" });
+                Apis.Get<IEventLog>().Write("Error updating from db_SamlTokenStore. " + ex,
+                    new EventLogEntryWriteOptions {Category = "SAML", EventId = 6010, EventType = "Error"});
             }
         }
 
@@ -267,7 +339,6 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                 // Execute the command
                 myConnection.Open();
                 return myCommand.ExecuteNonQuery();
-
             }
         }
 
@@ -294,18 +365,21 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                             oAuthDatas.Add(SamlHelpers.Deserialize<SamlTokenData>(dr[0].ToString()));
                         }
                     }
+
                     return oAuthDatas;
                 }
             }
             catch (Exception ex)
             {
-                Apis.Get<IEventLog>().Write("Error reading from db_SamlTokenStore. " + ex, new EventLogEntryWriteOptions { Category= "SAML", EventId = 6012, EventType="Error"});
+                Apis.Get<IEventLog>().Write("Error reading from db_SamlTokenStore. " + ex,
+                    new EventLogEntryWriteOptions {Category = "SAML", EventId = 6012, EventType = "Error"});
             }
 
             return null;
         }
 
         #region Install / Upgrade Pattern
+
         internal static bool IsInstalled()
         {
             return IsSamlTokenStoreInstalled() && IsSamlTokenDataInstalled();
@@ -325,7 +399,6 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                 var dr = myCommand.ExecuteReader();
 
                 return dr.Read();
-
             }
         }
 
@@ -336,7 +409,7 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                 var sql =
                     $"SELECT * FROM dbo.sysobjects WHERE id = object_id(N'[{databaseOwner}].[db_SamlTempTokenData]') AND OBJECTPROPERTY(id, N'IsTable') = 1";
 
-                var command = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+                var command = new SqlCommand(sql, conn) {CommandType = CommandType.Text};
                 conn.Open();
                 var dr = command.ExecuteReader();
                 return dr.Read();
@@ -386,7 +459,6 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                 // Execute the command
                 myConnection.Open();
                 return myCommand.ExecuteNonQuery();
-
             }
         }
 
@@ -401,7 +473,6 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                 // Execute the command
                 myConnection.Open();
                 return myCommand.ExecuteNonQuery();
-
             }
         }
 
@@ -499,7 +570,7 @@ namespace Telligent.Services.SamlAuthenticationPlugin
                 var sql =
                     $"CREATE TABLE [{databaseOwner}].[db_SamlTempTokenData]([TokenKey] [uniqueidentifier] NOT NULL, [EncryptedData] [text] NOT NULL) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]";
 
-                var command = new SqlCommand(sql, conn) { CommandType = CommandType.Text };
+                var command = new SqlCommand(sql, conn) {CommandType = CommandType.Text};
                 conn.Open();
                 return command.ExecuteNonQuery();
             }
@@ -508,4 +579,3 @@ namespace Telligent.Services.SamlAuthenticationPlugin
         #endregion
     }
 }
-
